@@ -1,0 +1,68 @@
+name: Build Arch Linux package
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Package x86_64 on Arch Linux
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Install tooling in fresh Arch container
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git rust cargo clang lld cmake nasm \
+            ffmpeg yt-dlp
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare non-root package builder
+        shell: bash
+        run: |
+          useradd -m archbuilder
+          chown -R archbuilder:archbuilder "$GITHUB_WORKSPACE"
+
+      - name: Build Arch package at pushed commit
+        shell: bash
+        env:
+          TICK_STUDIO_COMMIT: ${{ github.sha }}
+        run: |
+          runuser -u archbuilder -- env \
+            TICK_STUDIO_COMMIT="$TICK_STUDIO_COMMIT" \
+            GIT_CONFIG_GLOBAL=/dev/null \
+            bash -c 'cd "$1" && makepkg --noconfirm --cleanbuild' \
+            bash "$GITHUB_WORKSPACE/packaging/aur"
+
+      - name: Verify package archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(packaging/aur/tick-studio-git-*.pkg.tar.zst)
+          (( ${#files[@]} > 0 )) || { echo 'Package not produced'; exit 1; }
+          for file in "${files[@]}"; do
+            pacman -Qip "$file"
+            bsdtar -tf "$file" | grep -Fx 'usr/bin/tick-studio'
+            sha256sum "$file"
+          done
+
+      - name: Upload downloadable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tick-studio-arch-x86_64-${{ github.run_number }}
+          path: |
+            packaging/aur/*.pkg.tar.zst
+            packaging/aur/*.pkg.tar.zst.sig
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

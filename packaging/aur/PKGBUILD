@@ -1,0 +1,47 @@
+# Maintainer: Replace with your name and email
+pkgname=tick-studio-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc='Analyze Minecraft video GUI ticks and detect hidden cuts'
+arch=('x86_64')
+url='https://github.com/The-Night7/tick_studio'
+license=('unknown') # Replace when upstream publishes a license
+# yt-dlp and ffmpeg are required for downloader and scanner.
+depends=('ffmpeg' 'yt-dlp')
+makedepends=('cargo' 'rust' 'git' 'base-devel')
+options=('!lto')
+
+# In CI, pin VCS source to the triggering commit. Locally build the current main branch.
+_source_url="git+https://github.com/The-Night7/tick_studio.git"
+if [[ -n "${TICK_STUDIO_COMMIT:-}" ]]; then
+  _source_url+="#commit=${TICK_STUDIO_COMMIT}"
+fi
+source=("tick-studio::${_source_url}" 'tick-studio.desktop')
+sha256sums=('SKIP' 'a68d56216d9020b3836e43b658fe926bce4646448f6127a0205f5d48c90626eb')
+
+pkgver() {
+  cd "$srcdir/tick-studio"
+  printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$srcdir/tick-studio"
+  export CARGO_TARGET_DIR="$srcdir/cargo-target"
+  # Avoid distro-wide LTO applied to native code such as ring's C/assembly objects.
+  export CARGO_PROFILE_RELEASE_LTO=false
+  cargo build --release --locked
+}
+
+check() {
+  cd "$srcdir/tick-studio"
+  export CARGO_TARGET_DIR="$srcdir/cargo-target"
+  export CARGO_PROFILE_RELEASE_LTO=false
+  cargo test --release --locked
+}
+
+package() {
+  install -Dm755 "$srcdir/cargo-target/release/tick_studio" \
+    "$pkgdir/usr/bin/tick-studio"
+  install -Dm644 "$srcdir/tick-studio.desktop" \
+    "$pkgdir/usr/share/applications/tick-studio.desktop"
+}

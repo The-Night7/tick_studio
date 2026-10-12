@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Tick Studio
+Comment=Analyze Minecraft GUI ticks from video
+Exec=tick-studio
+Terminal=false
+Type=Application
+Categories=AudioVideo;Utility;
